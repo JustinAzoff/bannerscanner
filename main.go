@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -25,6 +27,24 @@ type ScanRequest struct {
 	ScanParams
 }
 
+type MultiPortScanRequest struct {
+	host  string
+	ports []int
+	ScanParams
+}
+
+func (m *MultiPortScanRequest) Expand() []ScanRequest {
+	var scans []ScanRequest
+	for _, p := range m.ports {
+		scans = append(scans, ScanRequest{
+			host:       m.host,
+			port:       p,
+			ScanParams: m.ScanParams,
+		})
+	}
+	return scans
+}
+
 func (sr *ScanRequest) HostPort() string {
 	return fmt.Sprintf("%s:%d", sr.host, sr.port)
 }
@@ -43,10 +63,10 @@ func (s *ScanResult) String() string {
 }
 
 func ScanPort(sr ScanRequest) ScanResult {
-	//log.Printf("Scanning %s:%d", host, port)
 	res := ScanResult{host: sr.host, port: sr.port}
 	var banner string
 	hostport := sr.HostPort()
+	log.Printf("Scanning %s", hostport)
 	conn, err := net.DialTimeout("tcp", hostport, sr.dialTimeout)
 	if err != nil {
 		//res.err = err
@@ -63,22 +83,62 @@ func ScanPort(sr ScanRequest) ScanResult {
 	res.banner = banner
 	return res
 }
-func main() {
-	rl := rate.NewLimiter(20, 5)
-	for i := 0; i < 90; i++ {
-		r := rl.Reserve()
-		if !r.OK() {
-			// Not allowed to act! Did you remember to set lim.burst to be > 0 ?
-			return
+
+func makeScans() chan MultiPortScanRequest {
+	ch := make(chan MultiPortScanRequest, 1000)
+	go func() {
+		for i := 30; i < 255; i++ {
+			host := fmt.Sprintf("192.168.2.%d", i)
+			msr := MultiPortScanRequest{
+				host:       host,
+				ports:      []int{22, 80, 443},
+				ScanParams: DefaultScanParams,
+			}
+			ch <- msr
 		}
-		time.Sleep(r.Delay())
-		res := ScanPort(ScanRequest{
-			host:       "192.168.2.1",
-			port:       i,
-			ScanParams: DefaultScanParams,
-		})
-		if res.open {
-			log.Printf("%s %d %s", res.host, res.port, res.banner)
+		close(ch)
+	}()
+	return ch
+}
+
+func rateLimitScans(ctx context.Context, ch chan MultiPortScanRequest, rl *rate.Limiter) chan MultiPortScanRequest {
+	out := make(chan MultiPortScanRequest, 2000)
+	go func() {
+		for msr := range ch {
+			rl.Wait(ctx)
+			out <- msr
+		}
+		close(out)
+	}()
+	return out
+}
+
+func scanStuff(ch chan MultiPortScanRequest) {
+	for s := range ch {
+		for _, sr := range s.Expand() {
+			res := ScanPort(sr)
+			if res.open {
+				log.Printf("%s %d %s", res.host, res.port, res.banner)
+			}
 		}
 	}
+}
+
+func startScanners(ch chan MultiPortScanRequest, n int) {
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			scanStuff(ch)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
+func main() {
+	scans := makeScans()
+	rl := rate.NewLimiter(20, 5)
+	limited := rateLimitScans(context.TODO(), scans, rl)
+	startScanners(limited, 20)
 }
