@@ -80,7 +80,7 @@ func ScanPort(sr ScanRequest) ScanResult {
 	log.Debug().Str("hostport", hostport).Msg("scanning")
 	conn, err := net.DialTimeout("tcp", hostport, sr.dialTimeout)
 	if err != nil {
-		//res.err = err
+		res.err = err
 		return res
 	}
 	defer conn.Close()
@@ -157,6 +157,13 @@ func scanWorker(ctx context.Context, ch chan MultiPortScanRequest) {
 					Int("port", res.port).
 					Str("banner", res.banner).
 					Msg("found service")
+			} else if res.err != nil {
+				log.Debug().
+					Str("state", "error").
+					Str("host", res.host).
+					Int("port", res.port).
+					Err(res.err).
+					Msg("error scanning")
 			}
 		}
 	}
