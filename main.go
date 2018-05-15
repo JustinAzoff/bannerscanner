@@ -201,7 +201,7 @@ func main() {
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	pretty := flag.Bool("pretty", false, "use pretty logs")
 	exclude := flag.StringSliceP("exclude", "x", []string{}, "cidr blocks to exclude")
-	parallel := flag.Bool("parallel", false, "Scan multiple ports on each host at the same time")
+	parallel := flag.Bool("parallel", false, "Scan multiple ports on each host in parallel")
 
 	flag.Parse()
 
