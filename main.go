@@ -26,7 +26,9 @@ var DefaultScanParams = ScanParams{
 }
 
 type ScanConfiguration struct {
-	ports []int
+	include []string
+	exclude []string
+	ports   []int
 	ScanParams
 }
 
@@ -97,8 +99,11 @@ func ScanPort(sr ScanRequest) ScanResult {
 func makeScans(sc ScanConfiguration) chan MultiPortScanRequest {
 	ch := make(chan MultiPortScanRequest, 1000)
 	go func() {
-		for i := 30; i < 255; i++ {
-			host := fmt.Sprintf("192.168.2.%d", i)
+		hosts, err := EnumerateHosts(sc.include, sc.exclude)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Invalid scan configuration")
+		}
+		for _, host := range hosts {
 			msr := MultiPortScanRequest{
 				host:       host,
 				ports:      sc.ports,
@@ -177,6 +182,7 @@ func main() {
 	bannerTimeout := flag.Duration("banner-timeout", 2*time.Second, "timeout when fetching banner")
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	pretty := flag.Bool("pretty", false, "use pretty logs")
+	exclude := flag.StringSliceP("exclude", "x", []string{}, "cidr blocks to exclude")
 
 	flag.Parse()
 
@@ -190,13 +196,20 @@ func main() {
 	}
 
 	sc := ScanConfiguration{
-		ports: *ports,
+		ports:   *ports,
+		include: flag.Args(),
+		exclude: *exclude,
 		ScanParams: ScanParams{
 			dialTimeout:   *dialTimeout,
 			bannerTimeout: *bannerTimeout,
 		},
 	}
 	log.Debug().Msgf("Scanning: %+v", sc)
+
+    if len(*ports) == 0 {
+        log.Fatal().Msg("No ports specified")
+        return
+    }
 
 	scans := makeScans(sc)
 	rl := rate.NewLimiter(rate.Limit(*scanRate), *scanRate)
