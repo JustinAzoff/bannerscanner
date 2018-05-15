@@ -206,10 +206,10 @@ func main() {
 	}
 	log.Debug().Msgf("Scanning: %+v", sc)
 
-    if len(*ports) == 0 {
-        log.Fatal().Msg("No ports specified")
-        return
-    }
+	if len(*ports) == 0 {
+		log.Fatal().Msg("No ports specified")
+		return
+	}
 
 	scans := makeScans(sc)
 	rl := rate.NewLimiter(rate.Limit(*scanRate), *scanRate)
@@ -219,5 +219,5 @@ func main() {
 	//	cancel()
 	//}()
 	limited := rateLimitScans(ctx, scans, rl)
-	startScanners(ctx, limited, *scanRate)
+	startScanners(ctx, limited, *scanRate+50)
 }
