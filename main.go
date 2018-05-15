@@ -175,7 +175,7 @@ func main() {
 			bannerTimeout: *bannerTimeout,
 		},
 	}
-	log.Printf("Scanning: %v", sc)
+	log.Printf("Scanning: %+v", sc)
 
 	scans := makeScans(sc)
 	rl := rate.NewLimiter(rate.Limit(*scanRate), *scanRate)
