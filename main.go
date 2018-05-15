@@ -66,7 +66,7 @@ func ScanPort(sr ScanRequest) ScanResult {
 	res := ScanResult{host: sr.host, port: sr.port}
 	var banner string
 	hostport := sr.HostPort()
-	log.Printf("Scanning %s", hostport)
+	//log.Printf("Scanning %s", hostport)
 	conn, err := net.DialTimeout("tcp", hostport, sr.dialTimeout)
 	if err != nil {
 		//res.err = err
@@ -106,30 +106,48 @@ func rateLimitScans(ctx context.Context, ch chan MultiPortScanRequest, rl *rate.
 	go func() {
 		for msr := range ch {
 			rl.Wait(ctx)
+			if d, _ := isDone(ctx); d {
+				goto done
+			}
 			out <- msr
 		}
+	done:
 		close(out)
 	}()
 	return out
 }
 
-func scanStuff(ch chan MultiPortScanRequest) {
+func isDone(ctx context.Context) (bool, struct{}) {
+	select {
+	case r := <-ctx.Done():
+		return true, r
+	default:
+		return false, struct{}{}
+	}
+
+}
+
+func scanWorker(ctx context.Context, ch chan MultiPortScanRequest) {
 	for s := range ch {
 		for _, sr := range s.Expand() {
+			done, _ := isDone(ctx)
+			if done {
+				return
+			}
 			res := ScanPort(sr)
 			if res.open {
-				log.Printf("%s %d %s", res.host, res.port, res.banner)
+				log.Printf("%s %d %q", res.host, res.port, res.banner)
 			}
 		}
 	}
 }
 
-func startScanners(ch chan MultiPortScanRequest, n int) {
+func startScanners(ctx context.Context, ch chan MultiPortScanRequest, n int) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
 		go func() {
-			scanStuff(ch)
+			scanWorker(ctx, ch)
 			wg.Done()
 		}()
 	}
@@ -138,7 +156,12 @@ func startScanners(ch chan MultiPortScanRequest, n int) {
 
 func main() {
 	scans := makeScans()
-	rl := rate.NewLimiter(20, 5)
-	limited := rateLimitScans(context.TODO(), scans, rl)
-	startScanners(limited, 20)
+	rl := rate.NewLimiter(100, 5)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(10 * time.Second)
+		cancel()
+	}()
+	limited := rateLimitScans(ctx, scans, rl)
+	startScanners(ctx, limited, 100)
 }
