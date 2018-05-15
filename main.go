@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	flag "github.com/spf13/pflag"
 	"golang.org/x/time/rate"
 )
 
@@ -19,6 +20,11 @@ type ScanParams struct {
 var DefaultScanParams = ScanParams{
 	dialTimeout:   2 * time.Second,
 	bannerTimeout: 2 * time.Second,
+}
+
+type ScanConfiguration struct {
+	ports []int
+	ScanParams
 }
 
 type ScanRequest struct {
@@ -84,14 +90,14 @@ func ScanPort(sr ScanRequest) ScanResult {
 	return res
 }
 
-func makeScans() chan MultiPortScanRequest {
+func makeScans(sc ScanConfiguration) chan MultiPortScanRequest {
 	ch := make(chan MultiPortScanRequest, 1000)
 	go func() {
 		for i := 30; i < 255; i++ {
 			host := fmt.Sprintf("192.168.2.%d", i)
 			msr := MultiPortScanRequest{
 				host:       host,
-				ports:      []int{22, 80, 443},
+				ports:      sc.ports,
 				ScanParams: DefaultScanParams,
 			}
 			ch <- msr
@@ -155,13 +161,29 @@ func startScanners(ctx context.Context, ch chan MultiPortScanRequest, n int) {
 }
 
 func main() {
-	scans := makeScans()
-	rl := rate.NewLimiter(100, 5)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(10 * time.Second)
-		cancel()
-	}()
+
+	scanRate := flag.Int("rate", 1000, "rate in attempts/sec")
+	ports := flag.IntSliceP("port", "p", []int{}, "ports to scan")
+	dialTimeout := flag.Duration("timeout", 2*time.Second, "Scan connection timeout")
+	bannerTimeout := flag.Duration("banner-timeout", 2*time.Second, "timeout when fetching banner")
+	flag.Parse()
+
+	sc := ScanConfiguration{
+		ports: *ports,
+		ScanParams: ScanParams{
+			dialTimeout:   *dialTimeout,
+			bannerTimeout: *bannerTimeout,
+		},
+	}
+	log.Printf("Scanning: %v", sc)
+
+	scans := makeScans(sc)
+	rl := rate.NewLimiter(rate.Limit(*scanRate), *scanRate)
+	ctx, _ := context.WithCancel(context.Background())
+	//go func() {
+	//	time.Sleep(10 * time.Second)
+	//	cancel()
+	//}()
 	limited := rateLimitScans(ctx, scans, rl)
-	startScanners(ctx, limited, 100)
+	startScanners(ctx, limited, *scanRate)
 }
