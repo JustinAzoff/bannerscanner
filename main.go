@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"sync"
@@ -25,10 +26,11 @@ var DefaultScanParams = ScanParams{
 }
 
 type ScanConfiguration struct {
-	include  []string
-	exclude  []string
-	ports    []int
-	parallel bool
+	include   []string
+	exclude   []string
+	ports     []int
+	parallel  bool
+	randomize bool
 	ScanParams
 }
 
@@ -102,6 +104,11 @@ func makeScans(sc ScanConfiguration) chan MultiPortScanRequest {
 		hosts, err := EnumerateHosts(sc.include, sc.exclude)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Invalid scan configuration")
+		}
+		if sc.randomize {
+			rand.Shuffle(len(hosts), func(i, j int) {
+				hosts[i], hosts[j] = hosts[j], hosts[i]
+			})
 		}
 		for _, host := range hosts {
 			if !sc.parallel {
@@ -215,10 +222,11 @@ func main() {
 	}
 
 	sc := ScanConfiguration{
-		ports:    *ports,
-		include:  flag.Args(),
-		exclude:  *exclude,
-		parallel: *parallel,
+		ports:     *ports,
+		include:   flag.Args(),
+		exclude:   *exclude,
+		parallel:  *parallel,
+		randomize: true,
 		ScanParams: ScanParams{
 			dialTimeout:   *dialTimeout,
 			bannerTimeout: *bannerTimeout,
