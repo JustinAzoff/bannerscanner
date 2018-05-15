@@ -102,7 +102,7 @@ func makeScans(sc ScanConfiguration) chan MultiPortScanRequest {
 			msr := MultiPortScanRequest{
 				host:       host,
 				ports:      sc.ports,
-				ScanParams: DefaultScanParams,
+				ScanParams: sc.ScanParams,
 			}
 			ch <- msr
 		}
