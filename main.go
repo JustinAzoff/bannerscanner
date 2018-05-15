@@ -199,10 +199,22 @@ func startScanners(ctx context.Context, ch chan MultiPortScanRequest, n int) {
 	wg.Wait()
 }
 
+func expandPorts(portSpecs []string) ([]int, error) {
+	var ports []int
+	for _, spec := range portSpecs {
+		some, err := EnumeratePorts(spec)
+		if err != nil {
+			return ports, err
+		}
+		ports = append(ports, some...)
+	}
+	return ports, nil
+}
+
 func main() {
 
 	scanRate := flag.Int("rate", 1000, "rate in attempts/sec")
-	ports := flag.IntSliceP("port", "p", []int{}, "ports to scan")
+	portspecs := flag.StringSliceP("port", "p", []string{}, "ports to scan. ex: 80,443,8000-8100")
 	dialTimeout := flag.Duration("timeout", 2*time.Second, "Scan connection timeout")
 	bannerTimeout := flag.Duration("banner-timeout", 2*time.Second, "timeout when fetching banner")
 	debug := flag.Bool("debug", false, "sets log level to debug")
@@ -220,9 +232,13 @@ func main() {
 	if *pretty {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
+	ports, err := expandPorts(*portspecs)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Invalid port specification")
+	}
 
 	sc := ScanConfiguration{
-		ports:     *ports,
+		ports:     ports,
 		include:   flag.Args(),
 		exclude:   *exclude,
 		parallel:  *parallel,
@@ -234,7 +250,7 @@ func main() {
 	}
 	log.Debug().Msgf("Scanning: %+v", sc)
 
-	if len(*ports) == 0 {
+	if len(ports) == 0 {
 		log.Fatal().Msg("No ports specified")
 		return
 	}
