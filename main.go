@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	flag "github.com/spf13/pflag"
 	"golang.org/x/time/rate"
@@ -72,7 +75,7 @@ func ScanPort(sr ScanRequest) ScanResult {
 	res := ScanResult{host: sr.host, port: sr.port}
 	var banner string
 	hostport := sr.HostPort()
-	//log.Printf("Scanning %s", hostport)
+	log.Debug().Str("hostport", hostport).Msg("scanning")
 	conn, err := net.DialTimeout("tcp", hostport, sr.dialTimeout)
 	if err != nil {
 		//res.err = err
@@ -81,6 +84,7 @@ func ScanPort(sr ScanRequest) ScanResult {
 	defer conn.Close()
 	bannerBuffer := make([]byte, 4096)
 	conn.SetDeadline(time.Now().Add(sr.bannerTimeout))
+	conn.Write([]byte("\r\n\r\n"))
 	n, err := conn.Read(bannerBuffer)
 	if err == nil {
 		banner = string(bannerBuffer[:n])
@@ -142,7 +146,12 @@ func scanWorker(ctx context.Context, ch chan MultiPortScanRequest) {
 			}
 			res := ScanPort(sr)
 			if res.open {
-				log.Printf("%s %d %q", res.host, res.port, res.banner)
+				log.Info().
+					Str("state", "open").
+					Str("host", res.host).
+					Int("port", res.port).
+					Str("banner", res.banner).
+					Msg("found service")
 			}
 		}
 	}
@@ -166,7 +175,19 @@ func main() {
 	ports := flag.IntSliceP("port", "p", []int{}, "ports to scan")
 	dialTimeout := flag.Duration("timeout", 2*time.Second, "Scan connection timeout")
 	bannerTimeout := flag.Duration("banner-timeout", 2*time.Second, "timeout when fetching banner")
+	debug := flag.Bool("debug", false, "sets log level to debug")
+	pretty := flag.Bool("pretty", false, "use pretty logs")
+
 	flag.Parse()
+
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+	log.Logger = log.Output(os.Stdout)
+	if *pretty {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	}
 
 	sc := ScanConfiguration{
 		ports: *ports,
@@ -175,7 +196,7 @@ func main() {
 			bannerTimeout: *bannerTimeout,
 		},
 	}
-	log.Printf("Scanning: %+v", sc)
+	log.Debug().Msgf("Scanning: %+v", sc)
 
 	scans := makeScans(sc)
 	rl := rate.NewLimiter(rate.Limit(*scanRate), *scanRate)
