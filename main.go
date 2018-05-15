@@ -10,7 +10,6 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-
 	flag "github.com/spf13/pflag"
 	"golang.org/x/time/rate"
 )
