@@ -25,9 +25,10 @@ var DefaultScanParams = ScanParams{
 }
 
 type ScanConfiguration struct {
-	include []string
-	exclude []string
-	ports   []int
+	include  []string
+	exclude  []string
+	ports    []int
+	parallel bool
 	ScanParams
 }
 
@@ -103,12 +104,23 @@ func makeScans(sc ScanConfiguration) chan MultiPortScanRequest {
 			log.Fatal().Err(err).Msg("Invalid scan configuration")
 		}
 		for _, host := range hosts {
-			msr := MultiPortScanRequest{
-				host:       host,
-				ports:      sc.ports,
-				ScanParams: sc.ScanParams,
+			if !sc.parallel {
+				msr := MultiPortScanRequest{
+					host:       host,
+					ports:      sc.ports,
+					ScanParams: sc.ScanParams,
+				}
+				ch <- msr
+			} else {
+				for _, p := range sc.ports {
+					msr := MultiPortScanRequest{
+						host:       host,
+						ports:      []int{p},
+						ScanParams: sc.ScanParams,
+					}
+					ch <- msr
+				}
 			}
-			ch <- msr
 		}
 		close(ch)
 	}()
@@ -189,6 +201,7 @@ func main() {
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	pretty := flag.Bool("pretty", false, "use pretty logs")
 	exclude := flag.StringSliceP("exclude", "x", []string{}, "cidr blocks to exclude")
+	parallel := flag.Bool("parallel", false, "Scan multiple ports on each host at the same time")
 
 	flag.Parse()
 
@@ -202,9 +215,10 @@ func main() {
 	}
 
 	sc := ScanConfiguration{
-		ports:   *ports,
-		include: flag.Args(),
-		exclude: *exclude,
+		ports:    *ports,
+		include:  flag.Args(),
+		exclude:  *exclude,
+		parallel: *parallel,
 		ScanParams: ScanParams{
 			dialTimeout:   *dialTimeout,
 			bannerTimeout: *bannerTimeout,
