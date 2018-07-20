@@ -15,6 +15,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
+var (
+	version = "dev"
+)
+
 type ScanParams struct {
 	dialTimeout   time.Duration
 	bannerTimeout time.Duration
@@ -221,8 +225,14 @@ func main() {
 	pretty := flag.Bool("pretty", false, "use pretty logs")
 	exclude := flag.StringSliceP("exclude", "x", []string{}, "cidr blocks to exclude")
 	parallel := flag.Bool("parallel", false, "Scan multiple ports on each host in parallel")
+	show_version := flag.Bool("version", false, "show version and exit")
 
 	flag.Parse()
+
+	if *show_version {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if *debug {
