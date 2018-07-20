@@ -7,12 +7,9 @@ release:
 builds:
 - goos:
   - linux
+  - darwin
   goarch:
   - amd64
-  goarm:
-  - "6"
-  targets:
-  - linux_amd64
   main: .
   ldflags: -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
   binary: bannerscanner
