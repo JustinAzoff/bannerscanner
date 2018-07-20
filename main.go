@@ -253,7 +253,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error getting rlimit")
 	}
-	rLimit.Cur = uint64(*scanRate)
+	rLimit.Cur = uint64(*scanRate) + 50
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error setting rlimit")
