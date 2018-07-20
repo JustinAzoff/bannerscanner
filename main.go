@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -247,6 +248,17 @@ func main() {
 		log.Fatal().Err(err).Msg("Invalid port specification")
 	}
 
+	var rLimit syscall.Rlimit
+	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error getting rlimit")
+	}
+	rLimit.Cur = uint64(*scanRate)
+	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error setting rlimit")
+	}
+
 	sc := ScanConfiguration{
 		ports:     ports,
 		include:   flag.Args(),
@@ -273,5 +285,5 @@ func main() {
 	//	cancel()
 	//}()
 	limited := rateLimitScans(ctx, scans, rl)
-	startScanners(ctx, limited, *scanRate+50)
+	startScanners(ctx, limited, *scanRate)
 }
